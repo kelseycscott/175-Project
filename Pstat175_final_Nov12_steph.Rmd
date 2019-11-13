@@ -104,11 +104,11 @@ table(new_dataset_down$hospital)
 plotKM(new_dataset_down)
 title("Kaplan–Meier estimator of the downsample 73 data") 
 
-#up sample to 300
+#up sample to 3397
 new_dataset_up <- balance_data(pneumon,method="up", dsize = 3397)
 table(new_dataset_up$hospital)
 plotKM(new_dataset_up)
-title("Kaplan–Meier estimator of the upsample to 300 data") 
+title("Kaplan–Meier estimator of the upsample to 3397 data") 
 
 #up saple for event and down sample for censored 150 each 
 new_dataset150 <- balance_data(pneumon,method="up", dsize = 150)
