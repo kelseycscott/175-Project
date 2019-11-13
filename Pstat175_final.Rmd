@@ -1,0 +1,127 @@
+---
+title: "Pstat175_final_project"
+author: "Stephanie OR (3119294)"
+date: "11/6/2019"
+output: pdf_document
+---
+
+
+```{r }  
+# echo = FALSE
+library(survival)
+library(KMsurv)
+data(pneumon)
+head(pneumon,3)
+dim(pneumon)
+```
+This data frame contains the following columns:  
+chldage        Age child had pneumonia, months  
+hospital       Indicator for hospitalization for pneumonia (1=yes, 0=no)  
+mthage         Age of the mother, years  
+urban          Urban environment for mother (1=yes, 0=no)  
+alcohol        Alcohol use by mother during pregnancy (1=yes, 0=no)  
+smoke          Cigarette use by mother during pregnancy (1=yes, 0=no)  
+region         Region of the coutry (1=northeast, 2=north central, 3=south, 4=west)  
+poverty        Mother at poverty level (1=yes, 0=no)  
+bweight        Normal birthweight (>5.5 lbs.) (1=yes, 0=no)  
+race           Race of the mother (1=white, 2=black, 3=other)  
+education      Education of the mother, years of school  
+nsibs          Number of siblings of the child  
+wmonth         Month the child was weaned  
+sfmonth        Month the child on solid food  
+agepn          Age child in the hospital for pneumonia, months  
+
+```{r}
+mean(pneumon$chldage) #mean of Age child had pneumonia in 
+mean(pneumon$agepn)
+length(which(pneumon$hospital=="1")) 
+length(which(pneumon$hospital=="0")) 
+#number of child Indicator for hospitalization for pneumonia
+
+pneumon.fit <- survfit(Surv(pneumon$chldage,pneumon$hospital)~1)
+
+plot(pneumon.fit,mark=19,lwd=2,ylim = c(0.3,1.0),
+     col=c("steelblue","pink","pink"), 
+     main="Kaplan–Meier estimator of the data")
+
+summary(pneumon.fit)
+print(pneumon.fit)
+
+# why is it not working? All NA 
+quantile(pneumon.fit, probs=c(.75,.50,.25),
+         conf.int=FALSE) 
+```
+
+
+# up and down sample 
+```{r}
+table(pneumon$hospital)
+
+set.seed(99)
+balance_data <- function(df, method, dsize){
+  event <- df[df$hospital=="1",]
+  censored <- df[df$hospital=="0",]
+  nevent <- nrow(event)
+  ncensored <- nrow(censored)
+  
+  if(method == "down"){
+    if(nevent > ncensored)
+    {
+      dfe <- events[sample(1:nevent, dsize, replace=F),]
+      new_dataset <- rbind(censored,dfe)
+    }
+    else{ #nevent <= ncensored
+      dfc <- censored[sample(1:ncensored, dsize, replace = F),]
+      new_dataset <- rbind(event,dfc)
+    }
+    new_dataset
+  }
+  
+  else if(method =="up"){
+    if(nevent < ncensored){
+      dfe <- event[sample(1:nevent, dsize, replace = T),]
+      new_dataset <- rbind(censored,dfe)
+    }
+    else{ #nevent <= ncensored
+      dfc <- censored[sample(1:ncensored, dsize, replace = T),]
+      new_dataset <- rbind(event,dfc)
+    }
+  }
+  new_dataset
+}
+
+plotKM <- function(dataset){
+  pneumon.fit <- survfit(Surv(dataset$chldage,dataset$hospital)~1)
+  summary(pneumon.fit)
+  print(pneumon.fit)
+  pneumon.cox <- coxph((Surv(chldage,hospital)~.), data = dataset)
+  print(pneumon.cox)
+  plot(pneumon.fit,mark=19,lwd=2,ylim = c(0.3,1.0),
+       col=c("steelblue","pink","pink"))
+}
+
+#down sample to 73
+new_dataset_down <- balance_data(pneumon,method="down",dsize = 73)
+table(new_dataset_down$hospital)
+plotKM(new_dataset_down)
+title("Kaplan–Meier estimator of the downsample 73 data") 
+
+#up sample to 3397
+new_dataset_up <- balance_data(pneumon,method="up", dsize = 3397)
+table(new_dataset_up$hospital)
+plotKM(new_dataset_up)
+title("Kaplan–Meier estimator of the upsample to 3397 data") 
+
+#up sample for event and down sample for censored 300 each 
+new_dataset300 <- balance_data(pneumon,method="up", dsize = 300)
+new_dataset300 <- balance_data(new_dataset300,method="down",dsize = 300)
+table(new_dataset300$hospital)
+plotKM(new_dataset300)
+title("Kaplan–Meier estimator of the up-down-sample to 300 data")
+
+``` 
+
+
+
+
+
