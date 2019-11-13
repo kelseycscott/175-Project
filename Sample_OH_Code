@@ -1,0 +1,29 @@
+balance_dataset <- function(df, method='downsample'){
+  
+  censored <- df[df$status==0,]
+  events <- df[df$status==1,]
+  nevent <- nrow(events)
+  ncensored <- nrow(censored)
+  
+  if (method == 'downsample'){
+      if (nevent > ncensored){
+        dfe <- events[sample(1:nevent, ncensored, replace=F),]
+        dfs <- rbind(censored, dfe)
+      }
+      else{ # ncensored >= nevents
+        dfc <- censored[sample(1:ncensored, nevent, replace=F),]
+        dfs <- rbind(events, dfc)  
+      }
+  }
+  if (method == 'upsample'){
+    if (nevent < ncensored){
+      dfe <- events[sample(1:nevent, ncensored, replace=T),]
+      dfs <- rbind(censored, dfe)
+    }else{ # nevents >= ncensored
+      dfc <- censored[sample(1:ncensored, nevent, replace=T),]
+      dfs <- rbind(events, dfc)  
+    }
+  }
+
+  dfs
+}
