@@ -1,0 +1,200 @@
+---
+title: "Pstat175 Final Project"
+author: |
+  | Students: 
+  |  Stephanie Or  (3119294) 
+  |  Jianpeng Yuan (7531445)
+  |  Kesey Scoot   (3930955)
+  |
+  | Group Number: 23 
+  |
+  | Instructor: Adam Tashman
+  
+date: "December 6, 2019"
+output: pdf_document
+---
+
+\clearpage
+
+\tableofcontents
+\clearpage
+
+# Abstract
+
+# Data Source and Backgriund information
+
+```{r }  
+# echo = FALSE
+library(survival)
+library(KMsurv)
+# library(dplyr)
+# library(ggplot2)
+# library(GGally)
+# library(rms)
+
+data(pneumon)
+head(pneumon,3)
+dim(pneumon)
+```
+This data frame contains the following columns:  
+chldage     -   Age child had pneumonia, months  
+hospital    -  Indicator for hospitalization for pneumonia (1=yes, 0=no)  
+mthage      -  Age of the mother, years  
+urban       -  Urban environment for mother (1=yes, 0=no)  
+alcohol     -  Alcohol use by mother during pregnancy (1=yes, 0=no)  
+smoke       -  Cigarette use by mother during pregnancy (1=yes, 0=no)  
+region      -  Region of the coutry (1=northeast, 2=north central, 3=south, 4=west)  
+poverty     -  Mother at poverty level (1=yes, 0=no)  
+bweight     -  Normal birthweight (>5.5 lbs.) (1=yes, 0=no)  
+race        -  Race of the mother (1=white, 2=black, 3=other)  
+education   -  Education of the mother, years of school  
+nsibs       -  Number of siblings of the child  
+wmonth      -  Month the child was weaned  
+sfmonth     -  Month the child on solid food  
+agepn       -  Age child in the hospital for pneumonia, months  
+
+# Research Question
+
+# Data Exploration
+```{r}
+
+summary(pneumon)
+
+mean(pneumon$chldage) #mean of Age child had pneumonia in 
+mean(pneumon$agepn)
+length(which(pneumon$hospital=="1")) 
+length(which(pneumon$hospital=="0")) 
+#number of child Indicator for hospitalization for pneumonia
+
+pneumon.fit <- survfit(Surv(pneumon$chldage,pneumon$hospital)~1)
+
+plot(pneumon.fit,mark=19,lwd=2,ylim = c(0.3,1.0),
+     col=c("steelblue","pink","pink"), 
+     main="Kaplan–Meier estimator of the data")
+
+summary(pneumon.fit)
+print(pneumon.fit)
+
+# why is it not working? All NA 
+quantile(pneumon.fit, probs=c(.75,.50,.25),
+         conf.int=FALSE) 
+```
+
+
+# Up-sample & Down-sample and Kaplan-Meier estimation curves
+since we have 3397 censored and only 73 event in the original dataset, we are going to do up-sample and down-sample to get a better dataset. 
+```{r}
+table(pneumon$hospital)
+
+set.seed(99)
+balance_data <- function(df, method, dsize){
+  event <- df[df$hospital=="1",]
+  censored <- df[df$hospital=="0",]
+  nevent <- nrow(event)
+  ncensored <- nrow(censored)
+  
+  if(method == "down"){
+    if(nevent > ncensored)
+    {
+      dfe <- events[sample(1:nevent, dsize, replace=F),]
+      new_dataset <- rbind(censored,dfe)
+    }
+    else{ #nevent <= ncensored
+      dfc <- censored[sample(1:ncensored, dsize, replace = F),]
+      new_dataset <- rbind(event,dfc)
+    }
+    new_dataset
+  }
+  
+  else if(method =="up"){
+    if(nevent < ncensored){
+      dfe <- event[sample(1:nevent, dsize, replace = T),]
+      new_dataset <- rbind(censored,dfe)
+    }
+    else{ #nevent <= ncensored
+      dfc <- censored[sample(1:ncensored, dsize, replace = T),]
+      new_dataset <- rbind(event,dfc)
+    }
+  }
+  new_dataset
+}
+
+plotKM <- function(dataset){
+  pneumon.fit <- survfit(Surv(dataset$chldage,dataset$hospital)~1)
+  # print(summary(pneumon.fit))
+  print(pneumon.fit)
+  plot(pneumon.fit,mark=19,lwd=2,ylim = c(0.3,1.0),
+       col=c("steelblue","pink","pink"))
+  # pneumon.cox <- coxph((Surv(chldage,hospital)~.), data = dataset)
+  # print(pneumon.cox)
+}
+
+#down sample to 73
+new_dataset_down <- balance_data(pneumon,method="down",dsize = 73)
+table(new_dataset_down$hospital)
+plotKM(new_dataset_down)
+title("Kaplan–Meier estimator of the downsample 73 data") 
+
+#up sample to 3397
+new_dataset_up <- balance_data(pneumon,method="up", dsize = 3397)
+table(new_dataset_up$hospital)
+plotKM(new_dataset_up)
+title("Kaplan–Meier estimator of the upsample to 3397 data") 
+
+#up sample for event and down sample for censored 300 each 
+new_dataset300 <- balance_data(pneumon,method="up", dsize = 300)
+new_dataset300 <- balance_data(new_dataset300,method="down",dsize = 300)
+table(new_dataset300$hospital)
+summary(new_dataset300)
+plotKM(new_dataset300)
+title("Kaplan–Meier estimator of the up-down-sample to 300 data")
+``` 
+We are going to use new_dataset300, which will have 300 data for both censored and event. 
+
+# Model Building
+## KM Curves (TESTING?)
+```{r}
+pneumon300 <- new_dataset300
+
+library(My.stepwise)
+# Stepwise Variable Selection Procedure for  
+# Cox’s Proportional Hazards Model and Cox’s Model
+
+pneumon.variable.list <- c("mthage","urban", "alcohol","smoke", "region","poverty", "bweight","race", "education", "nsibs", "wmonth","sfmonth","agepn")
+My.stepwise.coxph(Time = "chldage", Status = "hospital", variable.list = pneumon.variable.list , data = pneumon300)
+
+pneumon300.fit <- coxph(Surv(chldage,hospital)~nsibs + urban + region +
+                            mthage + wmonth + alcohol + smoke + agepn, data = pneumon300)
+anova(pneumon300.fit)
+
+
+#   Confidence Intervals for the Coefficients
+
+plot(pneumon.fit,lwd=2,col=c(2,4),
+fun="cloglog",xlab="Time until Death \n in days",ylab="log(S(t))")
+
+
+
+## Cox Proportional Hazards Model
+# pneumon300.cox <- coxph((Surv(chldage,hospital)~.),data = pneumon300)
+# summary(pneumon300.cox)
+# pneumon300.cox_fit <- survfit(pneumon300.cox)
+```
+## Cox PH
+
+# Model Checking 
+## Hypothesis Testing 
+
+# Residual tests
+
+# PH Assumpting
+## C-log-log plot 
+
+# Interaction term ??? 
+
+# Answer Question / Discussion
+
+# Concluson
+
+
+
