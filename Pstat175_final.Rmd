@@ -1,0 +1,431 @@
+---
+title: "Pstat175 Final Project"
+author: |
+| Students: 
+  |  Stephanie Or  (3119294) 
+  |  Jianpeng Yuan (7531445)
+  |  Kesey Scoot   (3930955)
+  |
+  | Group Number: 23 
+  |
+  | Instructor: Adam Tashman
+  |
+  
+  date: "December 6, 2019"
+output: pdf_document
+---
+
+\clearpage
+
+\tableofcontents
+\clearpage
+
+# Abstract
+
+# Data Source and Backgriund information
+
+```{r }  
+# echo = FALSE
+library(survival)
+library(KMsurv)
+library(MASS)
+library(dplyr)
+# library(ggplot2)
+# library(GGally)
+# library(rms)
+
+data(pneumon)
+head(pneumon,3)
+dim(pneumon)
+```
+This data frame contains the following columns:  
+chldage     -  Age child had pneumonia, months  
+hospital    -  Indicator for hospitalization for pneumonia (1=yes, 0=no)  
+mthage      -  Age of the mother, years  
+urban       -  Urban environment for mother (1=yes, 0=no)  
+alcohol     -  Alcohol use by mother during pregnancy (1=yes, 0=no)  
+smoke       -  Cigarette use by mother during pregnancy (1=yes, 0=no)  
+region      -  Region of the coutry (1=northeast, 2=north central, 3=south, 4=west)  
+poverty     -  Mother at poverty level (1=yes, 0=no)  
+bweight     -  Normal birthweight (>5.5 lbs.) (1=yes, 0=no)  
+race        -  Race of the mother (1=white, 2=black, 3=other)  
+education   -  Education of the mother, years of school  
+nsibs       -  Number of siblings of the child  
+wmonth      -  Month the child was weaned  
+sfmonth     -  Month the child on solid food  
+agepn       -  Age child in the hospital for pneumonia, months  
+
+# Research Question
+
+# Data Exploration
+```{r}
+summary(pneumon)
+
+mean(pneumon$chldage) #mean of Age child had pneumonia in 
+mean(pneumon$agepn)
+length(which(pneumon$hospital=="1")) 
+length(which(pneumon$hospital=="0")) 
+#number of child Indicator for hospitalization for pneumonia
+
+pneumon.fit <- survfit(Surv(pneumon$chldage,pneumon$hospital)~1)
+
+plot(pneumon.fit,mark=19,lwd=2,ylim = c(0.3,1.0),
+     col=c("steelblue","pink","pink"), 
+     main="Kaplan–Meier estimator of ",
+     xlab = "Time (hospitalized) by month"
+)
+
+summary(pneumon.fit)
+print(pneumon.fit)
+
+# why is it not working? All NA 
+quantile(pneumon.fit, probs=c(.75,.50,.25),
+         conf.int=FALSE) 
+```
+
+# Up-sample & Down-sample and Kaplan-Meier estimation curves
+since we have 3397 censored and only 73 event in the original dataset, we are going to do up-sample and down-sample to get a better dataset. 
+```{r}
+table(pneumon$hospital)
+
+set.seed(99)
+balance_data <- function(df, method, dsize){
+  event <- df[df$hospital=="1",]
+  censored <- df[df$hospital=="0",]
+  nevent <- nrow(event)
+  ncensored <- nrow(censored)
+  
+  if(method == "down"){
+    if(nevent > ncensored)
+    {
+      dfe <- events[sample(1:nevent, dsize, replace=F),]
+      new_dataset <- rbind(censored,dfe)
+    }
+    else{ #nevent <= ncensored
+      dfc <- censored[sample(1:ncensored, dsize, replace = F),]
+      new_dataset <- rbind(event,dfc)
+    }
+    new_dataset
+  }
+  
+  else if(method =="up"){
+    if(nevent < ncensored){
+      dfe <- event[sample(1:nevent, dsize, replace = T),]
+      new_dataset <- rbind(censored,dfe)
+    }
+    else{ #nevent <= ncensored
+      dfc <- censored[sample(1:ncensored, dsize, replace = T),]
+      new_dataset <- rbind(event,dfc)
+    }
+  }
+  new_dataset
+}
+
+plotKM <- function(dataset){
+  pneumon.fit <- survfit(Surv(dataset$chldage,dataset$hospital)~1)
+  print(pneumon.fit)
+  plot(pneumon.fit,mark=19,lwd=2,ylim = c(0.3,1.0),
+       col=c("steelblue","pink","pink"))
+}
+``` 
+
+```{r}
+#down sample to 73
+new_dataset_down <- balance_data(pneumon,method="down",dsize = 73)
+table(new_dataset_down$hospital)
+plotKM(new_dataset_down)
+title("Kaplan–Meier estimator of the downsample to 73 data each") 
+
+#up sample to 3397
+new_dataset_up <- balance_data(pneumon,method="up", dsize = 3397)
+table(new_dataset_up$hospital)
+plotKM(new_dataset_up)
+title("Kaplan–Meier estimator of the upsample to 3397 data each") 
+
+#up sample for event and down sample for censored 300 each 
+new_dataset300 <- balance_data(pneumon,method="up", dsize = 300)
+new_dataset300 <- balance_data(new_dataset300,method="down",dsize = 300)
+table(new_dataset300$hospital)
+plotKM(new_dataset300)
+title("Kaplan–Meier estimator of the up-down-sample to 300 data each")
+```
+We are going to use new_dataset300, which will have 300 data for both censored and event. 
+
+# cleaning/ changing data 
+```{r}
+new_dataset300 <- new_dataset300 %>%
+  group_by(alcohol) %>%
+  mutate(alcohol_1=ifelse(alcohol ==0,0, 
+                          ifelse(alcohol==1 , 1, 
+                                 ifelse(alcohol==2 , 1,
+                                        ifelse(alcohol==3 , 1 ,1)))))
+table(new_dataset300$alcohol_1)
+
+new_dataset300 <- new_dataset300 %>%
+  group_by(smoke) %>%
+  mutate(smoke_1=ifelse(smoke ==0,0, 
+                        ifelse(smoke==1 , 1, 
+                               ifelse(smoke==2 , 1, 1))))
+table(new_dataset300$smoke_1)
+```
+Change alcohol to 1 if it is 2,3 or 4 \n
+change smoke to 1 if it is 2 or 3 \n 
+
+# Model cleaning  ## cox PH model 
+```{r}
+pneumon300 <- new_dataset300
+
+library(My.stepwise)
+# Stepwise Variable Selection Procedure for Cox’s Proportional Hazards Model and Cox’s Model
+
+
+## before changeing alcohol and smoke
+pneumon.variable.list <- c("mthage","urban", "alcohol","smoke", "region","poverty", 
+                           "bweight","race", "education", "nsibs", "wmonth","sfmonth","agepn")
+My.stepwise.coxph(Time = "chldage", Status = "hospital",data = pneumon300,
+                  variable.list = pneumon.variable.list )
+pneumon300.coxph <- coxph(Surv(chldage,hospital)~nsibs + urban + region + 
+                            mthage + wmonth + alcohol + smoke, data = pneumon300)
+summary(pneumon300.coxph)
+
+
+## after changeing alcohol and smoke
+pneumon_1.variable.list <- c("mthage","urban","alcohol_1","smoke_1", "region","poverty", 
+                             "bweight","race", "education", "nsibs", "wmonth","sfmonth","agepn")
+My.stepwise.coxph(Time = "chldage", Status = "hospital", data = pneumon300,
+                  variable.list = pneumon_1.variable.list )
+pneumon300_1.coxph <- coxph(Surv(chldage,hospital)~ nsibs + urban + region + 
+                              mthage + smoke_1 + wmonth , data = pneumon300)
+summary(pneumon300_1.coxph)
+
+anova(pneumon300.coxph,pneumon300_1.coxph)
+```
+After we use My,stepwise.coxph(), we think what the $poverty,bweight,race,education$ and $sfmonth$ is not that we are interested.  
+Talk about that agepn is not useful (same reason with lab D)
+
+
+# Model Building
+## Kaplan-Meier estimation Curves (TESTING?)  
+```{r}
+# par(mfrow=c(1,2))
+
+## nsibs       -  Number of siblings of the child  
+table(pneumon300$nsibs) 
+nsibs.km <- plot(survfit(Surv(chldage,hospital)~nsibs,data = pneumon300),
+                 main ="Number of siblings of the child KM curves",
+                 xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:6)
+legend("bottomleft",inset = 0,legend=c("0","1","2","3","4"),
+       pch=15,col=2:6)
+
+
+## urban       -  Urban environment for mother (1=yes, 0=no)  
+table(pneumon300$urban)
+urban.km <- plot(survfit(Surv(chldage,hospital)~urban,data = pneumon300),
+                 main ="Urban environment for mother KM curves",
+                 xlab="Survival Probability", ylab = "Time", wd=2, col = c(2,4))
+legend("bottomleft",inset = 0,legend=c("1=yes", "0=no"),
+       pch=15,col=c(2,4))
+
+
+## region      -  Region of the coutry (1=northeast, 2=north central, 3=south, 4=west)  
+table(pneumon300$region)
+region.km <- plot(survfit(Surv(chldage,hospital)~region,data = pneumon300),
+                  main ="Region of the coutry KM curves",
+                  xlab="Survival Probability", ylab = "Time",lwd=2, col = 2:5)
+legend("bottomleft",inset = 0,pch=15,col= 2:5,
+       legend=c("1=northeast", "2=north central","3=south", "4=west"))
+
+
+## mthage      -  Age of the mother, years  
+table(pneumon300$mthage)
+mthage <- plot(survfit(Surv(chldage,hospital)~mthage,data = pneumon300),
+               main ="Age of the mother, years KM curves",
+               xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:15)
+legend("bottomleft",inset =0,pch=15,col= 2:15,
+       legend=c("16","17","18","19","20","21","22","23","24","25","26","27","28","29"))
+
+
+## wmonth      -  Month the child was weaned  
+table(pneumon300$wmonth)
+wmonth.km <- plot(survfit(Surv(chldage,hospital)~wmonth,data = pneumon300),
+                  main ="Month the child was weaned KM curves",
+                  xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:16)
+legend("bottomleft",inset =0,pch=15,col= 2:16,
+       legend=c("0","1","2","3","4","5","6","7","8","9","10","11","12","13","22"))
+
+
+## alcohol     -  Alcohol use by mother during pregnancy (1=yes, 0=no)
+par(mfrow=c(1,2))
+table(pneumon300$alcohol_1)
+alcohol_1.km <- plot(survfit(Surv(chldage,hospital)~alcohol_1,data = pneumon300),
+                  main ="Alcohol use by mother during pregnancy KM curves",
+                  xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:3)
+legend("bottomleft",inset =0,pch=15,col= 2:3, legend=c("0","1"))
+
+table(pneumon300$alcohol)
+alcohol.km <- plot(survfit(Surv(chldage,hospital)~alcohol,data = pneumon300),
+                  main ="Alcohol use by mother during pregnancy KM curves",
+                  xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:6)
+legend("bottomleft",inset =0,pch=15,col= 2:6, legend=c("0","1","2","3","4"))
+
+
+## smoke       -  Cigarette use by mother during pregnancy (1=yes, 0=no)
+par(mfrow=c(1,2))
+table(pneumon300$smoke_1) 
+smoke_1.km <- plot(survfit(Surv(chldage,hospital)~smoke_1,data = pneumon300),
+                 main ="Cigarette use by mother during pregnancy KM curves",
+                 xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:3)
+legend("bottomleft",inset =0,pch=15,col= 2:3, legend=c("0","1"))
+
+## (1=yes, 0=no) 2=?
+table(pneumon300$smoke) 
+smoke.km <- plot(survfit(Surv(chldage,hospital)~smoke,data = pneumon300),
+                 main ="Cigarette use by mother during pregnancy KM curves",
+                 xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:4)
+legend("bottomleft",inset =0,pch=15,col= 2:4, legend=c("0","1","2"))
+
+
+## agepn       -  Age child in the hospital for pneumonia, months  
+par(mfrow=c(1,1))
+table(pneumon300$agepn) #0:12
+agepn.km <- plot(survfit(Surv(chldage,hospital)~agepn,data = pneumon300),
+                 main ="Age child in the hospital for pneumonia in months KM curves",
+                 xlab="Survival Probability", ylab = "Time",lwd=2, col = 2:13)
+legend("bottomleft",inset =0,pch=15,col= 2:13,
+       legend=c("0","1","2","3","4","5","6","7","8","9","10","11","12"))
+```
+
+
+
+#Log rank test
+```{r}
+survdiff(Surv(chldage,hospital)~nsibs,data = pneumon300)
+
+survdiff(Surv(chldage,hospital)~urban,data = pneumon300)
+
+survdiff(Surv(chldage,hospital)~region,data = pneumon300)
+
+survdiff(Surv(chldage,hospital)~mthage,data = pneumon300)
+
+survdiff(Surv(chldage,hospital)~wmonth,data = pneumon300)
+
+survdiff(Surv(chldage,hospital)~alcohol_1,data = pneumon300) #P-value= 1 > 0.05
+survdiff(Surv(chldage,hospital)~alcohol,data = pneumon300)   #P-value=0.6 > 0.05
+
+survdiff(Surv(chldage,hospital)~smoke_1,data = pneumon300)
+survdiff(Surv(chldage,hospital)~smoke,data = pneumon300)
+```
+
+## AIC
+```{r}
+stepAIC(pneumon300.coxph, direction = "backward")
+
+#after change the dataset for alcohol and smoke
+stepAIC(pneumon300_1.coxph, direction = "backward")
+```
+
+## Residual tests
+```{r}
+cox.zph(pneumon300.coxph)  ##?alcohol too small?
+
+#after change the dataset for alcohol and smoke
+cox.zph(pneumon300_1.coxph) ##
+```
+if before changing alcohol = 0.0098 < 0.05 too small? 
+As a result, we decide to stratify the variable alcohol. 
+
+if after changing smoke_1 = 0.0024 < 0.05  too small? 
+As a result, we decide to stratify the variable smoke_1.  
+
+## C-log-log plot
+```{r}
+## nsibs       -  Number of siblings of the child  
+nsibs.km <- plot(survfit(Surv(chldage,hospital)~nsibs,data = pneumon300),
+                 main ="c-log-log plot for nsibs variable", fun="cloglog",
+                 xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:6)
+legend("topleft",inset = 0,legend=c("0","1","2","3","4"),
+       pch=15,col=2:6)
+
+
+## urban       -  Urban environment for mother (1=yes, 0=no)  
+urban.km <- plot(survfit(Surv(chldage,hospital)~urban,data = pneumon300),
+                 main ="c-log-log plot for urban variable",fun="cloglog",
+                 xlab="Survival Probability", ylab = "Time", wd=2, col = c(2,4))
+legend("topleft",inset = 0,legend=c("1=yes", "0=no"),
+       pch=15,col=c(2,4))
+
+
+## region      -  Region of the coutry (1=northeast, 2=north central, 3=south, 4=west)  
+region.km <- plot(survfit(Surv(chldage,hospital)~region,data = pneumon300),
+                  main ="c-log-log plot for region variable", fun="cloglog",
+                  xlab="Survival Probability", ylab = "Time",lwd=2, col = 2:5)
+legend("topleft",inset = 0,pch=15,col= 2:5,
+       legend=c("1=northeast", "2=north central","3=south", "4=west"))
+
+
+## mthage      -  Age of the mother, years  
+mthage <- plot(survfit(Surv(chldage,hospital)~mthage,data = pneumon300),
+               main ="c-log-log plot for mthage variable", fun="cloglog",
+               xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:15)
+legend("topleft",inset =0,pch=15,col= 2:15,
+       legend=c("16","17","18","19","20","21","22","23","24","25","26","27","28","29"))
+
+
+## wmonth      -  Month the child was weaned  
+wmonth.km <- plot(survfit(Surv(chldage,hospital)~wmonth,data = pneumon300),
+                  main ="c-log-log plot for wmonth variable", fun="cloglog",
+                  xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:16)
+legend("topleft",inset =0,pch=15,col= 2:16,
+       legend=c("0","1","2","3","4","5","6","7","8","9","10","11","12","13","22"))
+
+
+## alcohol     -  Alcohol use by mother during pregnancy (1=yes, 0=no)
+par(mfrow=c(1,2))
+alcohol_1.km <- plot(survfit(Surv(chldage,hospital)~alcohol_1,data = pneumon300),
+                  main ="c-log-log plot for alcohol_1 variable", fun="cloglog",
+                  xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:3)
+legend("topleft",inset =0,pch=15,col= 2:3, legend=c("0","1"))
+
+alcohol.km <- plot(survfit(Surv(chldage,hospital)~alcohol,data = pneumon300),
+                  main ="c-log-log plot for alcohol variable",fun="cloglog",
+                  xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:6)
+legend("topleft",inset =0,pch=15,col= 2:6, legend=c("0","1","2","3","4"))
+
+
+## smoke       -  Cigarette use by mother during pregnancy (1=yes, 0=no)
+par(mfrow=c(1,2))
+smoke_1.km <- plot(survfit(Surv(chldage,hospital)~smoke_1,data = pneumon300),
+                 main ="c-log-log plot for smoke_1 variable", fun="cloglog",
+                 xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:3)
+legend("topleft",inset =0,pch=15,col= 2:3, legend=c("0","1"))
+
+## (1=yes, 0=no) 2=?
+smoke.km <- plot(survfit(Surv(chldage,hospital)~smoke,data = pneumon300),
+                 main ="c-log-log plot for smoke variable", fun="cloglog",
+                 xlab="Survival Probability", ylab = "Time", lwd=2, col = 2:4)
+legend("topleft",inset =0,pch=15,col= 2:3, legend=c("0","1","2"))
+
+```
+
+## Interaction term ??? 
+
+## final model 
+
+## Ensure that the PH Assumption is actually met
+
+## Estimates with Confidence Intervals
+
+
+# Answer Question / Discussion
+
+# Concluson
+
+# References 
+Package 'My.stepwise' https://cran.r-project.org/web/packages/My.stepwise/My.stepwise.pdf
+Package ‘KMsurv’ https://cran.r-project.org/web/packages/KMsurv/KMsurv.pdf
+pneumon https://www.rdocumentation.org/packages/KMsurv/versions/0.1-5/topics/pneumon
+
+
+# Appendix (All code) 
+
+
